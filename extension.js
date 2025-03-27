@@ -46,6 +46,11 @@ async function setupPythonEnvironment(editor, pythonApi) {
                     vscode.window.showInformationMessage(
                         `Python Envy: interpreter set to: ${pythonPath}`
                     );
+
+                    // Handle kernel selection for notebooks
+                    if (editor.document.fileName.endsWith('.ipynb')) {
+                        await selectKernelForNotebook(editor, pythonPath);
+                    }
                 } catch (error) {
                     vscode.window.showErrorMessage(
                         `Python Envy: error setting Python interpreter: ${error.message}`
@@ -63,6 +68,51 @@ async function setupPythonEnvironment(editor, pythonApi) {
         if (currentDir === ".") {
             currentDir = "";
         }
+    }
+}
+
+async function selectKernelForNotebook(editor, pythonPath) {
+    try {
+        // Get the Jupyter extension
+        const jupyterExtension = vscode.extensions.getExtension('ms-toolsai.jupyter');
+        if (!jupyterExtension) {
+            vscode.window.showWarningMessage('Jupyter extension not found. Please install it to enable kernel selection.');
+            return;
+        }
+
+        // Get the kernel manager
+        const kernelManager = await jupyterExtension.exports.getKernelManager();
+        
+        // Get available kernels
+        const kernels = await kernelManager.getKernels();
+        
+        // Find a kernel that matches our Python environment
+        const matchingKernel = kernels.find(kernel => 
+            kernel.interpreter?.path === pythonPath
+        );
+
+        if (matchingKernel) {
+            // Select the matching kernel
+            await kernelManager.selectKernel(matchingKernel, editor.document);
+            vscode.window.showInformationMessage(
+                `Python Envy: selected kernel for notebook: ${matchingKernel.display_name}`
+            );
+        } else {
+            // If no matching kernel exists, create one
+            const newKernel = await kernelManager.createKernel({
+                interpreter: { path: pythonPath },
+                display_name: `Python (${path.basename(path.dirname(pythonPath))})`
+            });
+            
+            await kernelManager.selectKernel(newKernel, editor.document);
+            vscode.window.showInformationMessage(
+                `Python Envy: created and selected new kernel for notebook: ${newKernel.display_name}`
+            );
+        }
+    } catch (error) {
+        vscode.window.showErrorMessage(
+            `Python Envy: error selecting kernel: ${error.message}`
+        );
     }
 }
 
